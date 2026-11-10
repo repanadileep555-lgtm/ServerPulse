@@ -1,0 +1,9 @@
+DROP TABLE alerts;
+DROP TABLE alert_rules;
+DROP TABLE service_state_changes;
+DROP TABLE log_events;
+DROP TABLE monitored_services;
+DROP TABLE log_sources;
+DROP TABLE ingestion_receipts;
+DROP TABLE collector_credentials;
+DROP TABLE hosts;

@@ -1,16 +1,21 @@
 [project]
-name = "backend"
+name = "server-pulse-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "ServerPulse backend API"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "aiosqlite>=0.21.0",
     "fastapi[standard]>=0.162.2",
+    "fastapi-offline>=1.7.7",
     "pydantic-settings>=2.16.2",
+    "uvicorn>=0.54.0",
+    "pyjwt>=2.15.1",
+    "pwdlib[argon2]>=0.3.0",
 ]
 
 [project.scripts]
-backend = "app:main"
+backend = "app.main:main"
 
 [build-system]
 requires = ["uv_build>=0.13.7,<0.14.0"]
