@@ -5,17 +5,55 @@ import jwt
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from app.auth.jwt_service import ACCESS_TOKEN_TYPE, JWTService, TokenError, get_jwt_service
+from app.auth.jwt_service import (
+    ACCESS_TOKEN_TYPE,
+    REFRESH_TOKEN_TYPE,
+    JWTService,
+    TokenError,
+    get_jwt_service,
+)
 from app.middleware.auth_middleware import AuthenticatedUser, get_current_user
 
 SECRET = "test-secret-with-enough-length-0123456789"
 
 
-def make_service(expire_minutes: int = 30, secret: str = SECRET) -> JWTService:
-    return JWTService(secret, "HS256", expire_minutes)
+def make_service(
+    expire_minutes: int = 30,
+    secret: str = SECRET,
+    refresh_days: int = 1,
+) -> JWTService:
+    return JWTService(secret, "HS256", expire_minutes, refresh_days)
 
 
 class JWTServiceTests(unittest.TestCase):
+    def test_refresh_token_round_trip_returns_subject_with_one_day_lifetime(self) -> None:
+        service = make_service()
+        token = service.create_refresh_token("alice")
+
+        claims = service.validate_refresh_token(token)
+
+        self.assertEqual(claims["sub"], "alice")
+        self.assertEqual(claims["type"], REFRESH_TOKEN_TYPE)
+        self.assertEqual(claims["exp"] - claims["iat"], 24 * 60 * 60)
+
+    def test_expired_refresh_token_is_rejected(self) -> None:
+        token = make_service(refresh_days=-1).create_refresh_token("alice")
+
+        with self.assertRaises(TokenError):
+            make_service().validate_refresh_token(token)
+
+    def test_refresh_token_is_rejected_as_access_token(self) -> None:
+        token = make_service().create_refresh_token("alice")
+
+        with self.assertRaisesRegex(TokenError, "must be 'access'"):
+            make_service().validate_access_token(token)
+
+    def test_access_token_is_rejected_as_refresh_token(self) -> None:
+        token = make_service().create_access_token("alice")
+
+        with self.assertRaisesRegex(TokenError, "must be 'refresh'"):
+            make_service().validate_refresh_token(token)
+
     def test_access_token_round_trip_returns_subject(self) -> None:
         service = make_service()
         token = service.create_access_token("alice", {"role": "admin"})
@@ -52,7 +90,7 @@ class JWTServiceTests(unittest.TestCase):
             algorithm="HS256",
         )
 
-        with self.assertRaisesRegex(TokenError, "not an access token"):
+        with self.assertRaisesRegex(TokenError, "must be 'access'"):
             make_service().validate_access_token(token)
 
     def test_token_missing_required_claims_is_rejected(self) -> None:

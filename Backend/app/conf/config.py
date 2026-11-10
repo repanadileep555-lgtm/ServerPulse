@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     jwt_secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
+    jwt_refresh_token_expire_days: int = 1
 
 
 settings = Settings()
