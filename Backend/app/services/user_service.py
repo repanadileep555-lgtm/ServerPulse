@@ -28,6 +28,13 @@ class InvalidRefreshTokenError(Exception):
     """The refresh token is invalid or its account is no longer enabled."""
 
 
+class IncorrectPasswordError(Exception):
+    """The supplied current password does not match the stored one."""
+
+
+USER_COLUMNS = "id, username, is_admin, enabled, created_at, display_name, avatar"
+
+
 def _verify_password(password: str, stored_hash: str | None) -> bool:
     if stored_hash is None:
         # Do comparable password work even when the username does not exist.
@@ -55,20 +62,51 @@ class UserService:
 
     async def get_enabled_user(self, user_id: str) -> UserResponse | None:
         row = await self._pool.fetch_one(
-            """
-            SELECT id, username, is_admin, enabled, created_at
-            FROM users WHERE id = ? AND enabled = 1
-            """,
+            f"SELECT {USER_COLUMNS} FROM users WHERE id = ? AND enabled = 1",
             (user_id,),
         )
         return UserResponse(**dict(row)) if row is not None else None
 
+    async def update_profile(
+        self, user_id: str, changes: dict[str, str | None]
+    ) -> UserResponse | None:
+        row = await self._pool.fetch_one(
+            f"""
+            UPDATE users
+            SET display_name = CASE WHEN ? THEN ? ELSE display_name END,
+                avatar = CASE WHEN ? THEN ? ELSE avatar END
+            WHERE id = ? AND enabled = 1
+            RETURNING {USER_COLUMNS}
+            """,
+            (
+                int("display_name" in changes),
+                changes.get("display_name"),
+                int("avatar" in changes),
+                changes.get("avatar"),
+                user_id,
+            ),
+        )
+        return UserResponse(**dict(row)) if row is not None else None
+
+    async def change_password(self, user_id: str, current: str, new: str) -> bool:
+        """Return False when the account is unavailable; raise if the current password is wrong."""
+        row = await self._pool.fetch_one(
+            "SELECT password_hash FROM users WHERE id = ? AND enabled = 1", (user_id,)
+        )
+        if row is None:
+            return False
+        if not await asyncio.to_thread(_verify_password, current, row["password_hash"]):
+            raise IncorrectPasswordError("Current password is incorrect")
+        new_hash = await asyncio.to_thread(password_hasher.hash, new)
+        updated = await self._pool.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ? AND enabled = 1",
+            (new_hash, user_id),
+        )
+        return updated == 1
+
     async def list_users(self) -> list[UserResponse]:
         rows = await self._pool.fetch_all(
-            """
-            SELECT id, username, is_admin, enabled, created_at
-            FROM users ORDER BY created_at, id
-            """
+            f"SELECT {USER_COLUMNS} FROM users ORDER BY created_at, id"
         )
         return [UserResponse(**dict(row)) for row in rows]
 
@@ -78,10 +116,10 @@ class UserService:
         )
         try:
             row = await self._pool.fetch_one(
-                """
+                f"""
                 INSERT INTO users (username, password_hash, is_admin)
                 VALUES (?, ?, ?)
-                RETURNING id, username, is_admin, enabled, created_at
+                RETURNING {USER_COLUMNS}
                 """,
                 (request.username, password_hash, int(is_admin)),
             )

@@ -9,15 +9,18 @@ from app.api.routes import router
 from app.db.db_pool import DatabasePool
 from app.conf.config import settings
 from app.middleware.mw_client import add_middleware
+from app.services.ssh_collector import ssh_supervisors
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     async with DatabasePool() as pool:
         app.state.db_pool = pool
+        await ssh_supervisors.restore(pool)
         try:
             yield
         finally:
+            await ssh_supervisors.shutdown()
             del app.state.db_pool
 
 

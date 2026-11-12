@@ -32,7 +32,8 @@ class UserTests(unittest.TestCase):
         created = self.client.post("/users/create", json=self.credentials)
         self.assertEqual(created.status_code, 201)
         self.assertEqual(
-            set(created.json()), {"id", "username", "is_admin", "enabled", "created_at"}
+            set(created.json()),
+            {"id", "username", "is_admin", "enabled", "created_at", "display_name", "avatar"},
         )
         self.assertFalse(created.json()["is_admin"])
         self.assertTrue(created.json()["enabled"])
@@ -136,6 +137,66 @@ class UserTests(unittest.TestCase):
         disabled = self.client.post("/users/refresh", json={"refresh_token": logged_in["refresh_token"]})
         self.assertEqual(disabled.status_code, 401)
         self.assertEqual(disabled.json(), {"detail": "Invalid refresh token"})
+
+    def test_user_can_edit_profile_and_avatar(self) -> None:
+        self.client.post("/users/create", json=self.credentials)
+        token = self.client.post("/users/login", json=self.credentials).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        avatar = "data:image/png;base64,iVBORw0KGgo="
+
+        updated = self.client.patch(
+            "/users/me", json={"display_name": "  Sam  ", "avatar": avatar}, headers=headers
+        )
+        self.assertEqual(updated.status_code, 200)
+        self.assertEqual(updated.json()["display_name"], "Sam")
+        self.assertEqual(updated.json()["avatar"], avatar)
+        self.assertEqual(updated.json()["username"], "student")
+
+        renamed_only = self.client.patch("/users/me", json={"display_name": None}, headers=headers)
+        self.assertIsNone(renamed_only.json()["display_name"])
+        self.assertEqual(renamed_only.json()["avatar"], avatar)
+
+        cleared = self.client.patch("/users/me", json={"avatar": None}, headers=headers)
+        self.assertIsNone(cleared.json()["avatar"])
+
+        for payload in [
+            {"avatar": "data:text/html;base64,PGgxPg=="},
+            {"avatar": "https://example.com/me.png"},
+            {"display_name": "   "},
+            {"username": "renamed"},
+        ]:
+            with self.subTest(payload=payload):
+                rejected = self.client.patch("/users/me", json=payload, headers=headers)
+                self.assertEqual(rejected.status_code, 422)
+        self.assertEqual(self.client.patch("/users/me", json={}).status_code, 401)
+
+    def test_password_change_requires_current_password(self) -> None:
+        self.client.post("/users/create", json=self.credentials)
+        token = self.client.post("/users/login", json=self.credentials).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        new_password = "a-brand-new-password"
+
+        wrong = self.client.post(
+            "/users/me/password",
+            json={"current_password": "not-the-password", "new_password": new_password},
+            headers=headers,
+        )
+        self.assertEqual(wrong.status_code, 400)
+        self.assertEqual(self.client.post("/users/login", json=self.credentials).status_code, 200)
+
+        changed = self.client.post(
+            "/users/me/password",
+            json={"current_password": self.credentials["password"], "new_password": new_password},
+            headers=headers,
+        )
+        self.assertEqual(changed.status_code, 204)
+        self.assertEqual(self.client.post("/users/login", json=self.credentials).status_code, 401)
+        self.assertEqual(
+            self.client.post(
+                "/users/login", json={"username": "student", "password": new_password}
+            ).status_code,
+            200,
+        )
 
     def test_admin_endpoint_requires_enabled_admin_token(self) -> None:
         self.client.post("/users/create", json=self.credentials)

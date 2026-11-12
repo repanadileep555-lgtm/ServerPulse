@@ -27,12 +27,17 @@ def connect(db_path: Path) -> sqlite3.Connection:
 
 
 def _run_in_transaction(con: sqlite3.Connection, body: str) -> None:
+    # Table rebuilds drop parent tables; with foreign keys on, ON DELETE CASCADE would wipe child rows.
+    # PRAGMA foreign_keys is a no-op inside a transaction, so it must be toggled out here.
+    con.execute("PRAGMA foreign_keys = OFF")
     try:
         con.executescript("BEGIN IMMEDIATE;\n" + body + "\nCOMMIT;")
     except sqlite3.Error:
         if con.in_transaction:
             con.execute("ROLLBACK")
         raise
+    finally:
+        con.execute("PRAGMA foreign_keys = ON")
 
 
 def _ensure_migrations_table(con: sqlite3.Connection) -> None:

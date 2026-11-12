@@ -1,11 +1,15 @@
 # ServerPulse - High-Level Design
 
-Status: Proposed architecture; not a description of completed functionality.
+Updated: 2026-11-11. This document contains both implemented paths and the target
+design. Authentication/admin UI and host resource/process monitoring are
+implemented. Log/service collection, alerts, and reporting remain proposed.
+The [roadmap](../../roadmap.md) is the consolidated completion checklist.
 
 ## 1. Purpose
 
-ServerPulse is a college-project monitoring dashboard that collects Windows and
-Linux logs, tracks selected services, and displays alerts in one place.
+ServerPulse is a college-project monitoring dashboard for Windows and Linux.
+It currently monitors machine resources and processes; existing logs, selected
+OS services, and alerts are the next planned operational data paths.
 
 Development starts with the local Windows computer and a local WSL distribution.
 The same architecture must support external Windows and Linux servers without a
@@ -16,6 +20,8 @@ separate collection mechanism or a database change for every new machine.
 - Existing system, application, and available security/authentication logs.
 - Optional Linux audit logs where the environment supports them.
 - Selected Windows and Linux service states and state-change history.
+- CPU percentage, memory usage, and all visible processes on registered Windows
+  and Linux machines, including runtime classification and Linux zombie detection.
 - Host connectivity, source collection status, log search, and basic alerts.
 - Local and remote hosts using the same ingestion APIs.
 
@@ -35,10 +41,11 @@ separate collection mechanism or a database change for every new machine.
 | Central database | SQLite on the backend machine's local disk |
 | Collection | Lightweight Python collector running on each monitored host |
 | Scheduling | Collectors poll locally, then push batches to the backend |
-| Platform access | PowerShell on Windows; journalctl, systemctl, and files on Linux |
+| Planned log/service access | PowerShell on Windows; journalctl, systemctl, and existing files on Linux |
+| Resource/process access | psutil on Windows and Linux, running on the monitored host |
 | Deployment | One backend instance; Windows and WSL are the first two hosts |
 | External hosts | Same collector with a reachable HTTPS backend URL |
-| Credentials | Separate per-host collector tokens; separate administrator credential |
+| Credentials | Per-host collector tokens; user access/refresh JWTs and enabled-admin checks |
 | Live updates | Dashboard polls APIs initially; no WebSocket requirement |
 
 No separate collector framework, cloud service, Docker deployment, or database
@@ -47,20 +54,23 @@ under Task Scheduler or a systemd service.
 
 ## 3. Architecture
 
+The diagram is the target architecture. CPU/memory/process ingestion and queries
+exist today; log/service adapters and the alert engine do not yet exist.
+
 ```mermaid
 flowchart LR
     subgraph Windows["Local Windows host"]
-        WL["Existing Event Logs / application logs / services"]
+        WL["CPU / memory / processes + logs / services"]
         WC["Windows collector"]
         WL --> WC
     end
     subgraph WSL["Local WSL Linux host"]
-        LL["Journal / existing application and auth logs / services"]
+        LL["CPU / memory / processes + journal / logs / services"]
         LC["Linux collector"]
         LL --> LC
     end
     subgraph Remote["External Windows or Linux host"]
-        RL["Native logs and services"]
+        RL["Native resources / processes / logs / services"]
         RC["Same platform collector"]
         RL --> RC
     end
@@ -86,6 +96,10 @@ same physical computer.
 
 ### 4.1 Collector
 
+Target responsibilities below include future log/service collection. The current
+`collect-host` implements psutil resource/process sampling and one pending snapshot;
+it has no journal/Event Log adapter, native log checkpoint, or service poller yet.
+
 - Read configured sources using platform-specific adapters.
 - Convert native records to the common event format.
 - Poll selected services and report collection failures explicitly.
@@ -102,6 +116,10 @@ committed to Git or included in diagnostic logs.
 
 ### 4.2 Backend
 
+Resource ingestion/querying and account/host administration exist today. Log and
+service observation ingestion, alert evaluation, and alert acknowledgement below
+remain planned.
+
 - Authenticate collectors and validate their ownership of sources and services.
 - Validate batch sizes, event fields, timestamps, and state values.
 - Store normalized events, latest service observations, and transition history.
@@ -111,8 +129,14 @@ committed to Git or included in diagnostic logs.
 
 ### 4.3 Dashboard
 
+Implemented screens include login/registration, account/session information, admin
+account management, API/database health, and Machines. Logs, OS services, alerts,
+and reports are planned views, not alternate names for the process table.
+
 - Overview: registered hosts, fresh/stale collectors, service issues, active alerts.
 - Hosts: platform, connectivity, latest heartbeat, and per-source errors.
+- Machines: CPU/memory history, searchable process snapshots, per-process history,
+  informational long-running classification, and Linux zombie visibility.
 - Logs: host, category, severity, source, service where available, keyword, and time filters.
 - Services: latest observed state, observation age, and transition history.
 - Alerts: rule, affected host/source/service, evidence, and acknowledgement.
@@ -121,6 +145,42 @@ Display empty results separately from collection errors. Do not present a stale
 observation as a current healthy state.
 
 ## 5. Log sources and extraction
+
+### Resource and process monitoring
+
+Implemented resource monitoring is separate from the proposed log/service
+collection adapters. Each registered host runs `collect-host` locally; registration
+and token rotation are administrator-only, and dashboard queries require an enabled
+user account. Collectors authenticate with one-time, host-bound credentials, not
+administrator tokens. Windows, WSL, and external hosts use the same path.
+
+The collector uses psutil for one-second host CPU measurements, total/available
+memory, and all visible processes. Per-process CPU is normalized across logical
+CPUs using deltas between observations; its first value is unknown. Process
+identity is PID plus creation time, preventing PID reuse from merging history.
+RSS is process memory, while host used memory is total minus available.
+
+Long-running means elapsed lifetime at least a configurable per-host threshold
+(default one hour), informational only. Linux `zombie` is detected from native
+process state; Windows reports not applicable. A long-lived service is not
+automatically unhealthy. Permission-denied partial rows and disappeared-process
+counts keep visibility limitations explicit. No synthetic data or process
+termination is required.
+
+Resource snapshots have their own atomic ingestion and receipt tables. A collector
+persists one pending snapshot and retries it before sampling again. This bounds
+outage storage, but does not capture an offline timeline. Limits are 20,000
+processes and 16 MiB per upload. A delayed batch cannot overwrite newer observations.
+Physical snapshot retention is 24 hours, pruned per host on subsequent ingestion;
+receipts survive seven days. Time-based queries exclude expired history. Offline
+hosts retain visibly stale last samples until ingestion resumes.
+
+The dashboard polls at ten-second intervals, offers filtering/sorting/pagination,
+and shows per-process history. Successful snapshot receipt acts as heartbeat;
+60 seconds without receipt marks the host offline. No sample means unknown,
+not zero CPU/memory. Threshold changes apply to new observations.
+
+Existing log and service collection below remains a separate planned capability.
 
 | Category | Windows | Linux / WSL |
 | --- | --- | --- |
@@ -131,9 +191,7 @@ observation as a current healthy state.
 
 ### Windows considerations
 
-- Read System and Application channels first.
-- Security channel access may require elevated privileges or delegated permissions.
-- Audit events depend on the machine's enabled audit policies.
+- Read System and Application channels. Security is out of scope for this collector.
 - Query incrementally by channel and record ID, with bounded batch sizes.
 - Detect channel clearing/reset and record a collection-gap warning.
 
@@ -163,7 +221,45 @@ application records from system and authentication records in a shared journal.
 
 ## 6. Collection and delivery flow
 
-Suggested starting defaults, to be tuned during testing:
+### Current resource path
+
+The collector samples locally at a nominal ten-second interval, atomically saves
+one pending resource snapshot, and pushes it with a UUID. Only after a committed
+acknowledgement does it delete the pending file. On delivery failure it retries
+that snapshot before sampling again; it does not collect an unlimited outage
+timeline. Actual intervals can exceed ten seconds on busy hosts because sampling
+and delivery never overlap.
+
+Uploads are limited to 20,000 processes and 16 MiB. Duplicate IDs require identical
+validated payloads. New committed snapshots update receipt-time heartbeat; after
+60 seconds the host is offline. Snapshot freshness is shown independently.
+Process CPU is unknown on first observation or when normalization is unavailable.
+History queries cover 24 hours; pruning runs on subsequent host ingestion, with
+deduplication receipts retained seven days.
+
+### Implemented log path
+
+`collect-host --logs` reads Windows System/Application events (`Get-WinEvent`,
+EventRecordID checkpoints, 100 records per channel) and Linux journald
+(`journalctl --output=json`, cursor checkpoints). Security logs are not collected.
+Each batch is posted to `POST /collector/logs`. The collector advances its
+checkpoint only after the server acknowledges the batch. Accepted log batches
+update `hosts.last_heartbeat_at`, so a host that only sends logs is shown as online.
+Journald records whose unit ends in `.service` are linked to `monitored_services`
+through `log_events.service_id`. Windows Service Control Manager events carry the service
+display name, which is matched case-insensitively to the inventory's display or service name.
+Other units, such as scopes and kernel messages, and other Windows events stay unlinked. Links
+apply only to events received after the service is in the inventory. The host detail page lists
+these services with their log counts (`GET /hosts/{id}/services`); Windows services with no
+linked events show "n/a". Their state stays "Not checked yet" until the collector's
+service inventory reports them; the inventory (Windows `Get-Service`, systemd
+`systemctl`) is sent every 300 seconds through `POST /collector/services`, upserts
+`monitored_services` by name, and does not yet record transition history (roadmap items 8/9).
+
+### Planned service path
+
+The defaults and checkpoint flow below are proposed for future log/service
+adapters, not settings already implemented in `collect-host`:
 
 | Activity | Initial setting |
 | --- | --- |
@@ -219,12 +315,13 @@ state controls resumption. Never update one ahead of durable event storage.
 
 ## 7. Data model
 
-The [SQLite schema](database-schema.md) defines the proposed tables and constraints
-for this architecture. It supports local and external hosts, existing log sources,
-host-scoped credentials, acknowledged checkpoints, and ingestion receipts. It is
-a design document, not an applied database migration.
+The [SQLite schema](../db/database-schema.md) documents current tables and planned
+log/service contracts. Executable migrations live in
+[Backend/db/migrations](../../../Backend/db/migrations), with consolidated DDL in
+[schema.sql](../../../Backend/db/schema/schema.sql). Apply migrations explicitly;
+server startup opens the shared async pool but does not migrate the database.
 
-Required logical entities:
+Logical entities (schema presence is not runtime completion):
 
 | Entity | Responsibility |
 | --- | --- |
@@ -237,6 +334,11 @@ Required logical entities:
 | Alert rules | Service-failure and repeated-error conditions |
 | Alerts | Active/history state, evidence, acknowledgement, resolution times |
 | Ingestion receipts | Batch identity and outcome for idempotent retries |
+| Monitoring samples | CPU, memory, process visibility counts, and observation/receipt times |
+| Process samples | Sample-owned process rows with PID + creation time identity |
+| Monitoring receipts | Resource batch deduplication independent of planned log/service ingestion |
+| Users | Argon2-hashed accounts, enabled status, and basic administrator/viewer access |
+| User tokens | Reserved opaque-token schema; current access/refresh JWTs are not stored here |
 
 ### Common event fields
 
@@ -259,21 +361,38 @@ timestamps need an explicit quality marker if a fallback timestamp is used.
 - Start with one backend worker; SQLite still permits only one writer at a time.
 - Index source/time, severity/time, and host/source lookup paths.
 - Use pagination and bounded time ranges for log queries.
-- Configure retention, for example 30 days, and delete expired events in small batches.
+- Resource/process queries use 24 hours, with per-host ingestion-triggered pruning;
+  monitoring receipts use seven days. Log events are retained for 2 days.
 - Back up using SQLite's backup facilities rather than copying only a live database file.
 
 ## 8. Proposed API boundaries
 
-Route names are provisional; detailed request/response contracts follow in low-level design.
+The host/resource routes below are implemented; `/api/` log, service, and alert
+routes remain provisional. See the [backend guide](../../../Backend/README.md)
+for implemented resource/process request and response behavior.
 
 | API | Access | Purpose |
 | --- | --- | --- |
-| `GET /health` | Minimal public response | Backend process liveness, not monitored-host health |
-| `POST /api/hosts` | Administrator | Register host and provision its initial credential |
-| `GET /api/hosts` | Dashboard/admin | List hosts and connectivity |
-| `POST /api/hosts/{id}/credentials/rotate` | Administrator | Rotate/revoke collector access |
+| `GET /health` | Public | Backend database check, not monitored-host resource/service health |
+| `POST /users/create`, `POST /users/login` | Public | Regular-user registration and access/refresh JWT login |
+| `POST /users/refresh` | Refresh JWT | New access token for an enabled account |
+| `GET /users/me` | User JWT | Enabled account profile |
+| `GET /users`, `POST /users/admins` | Administrator | Account directory and administrator creation |
+| `POST /hosts` | User JWT | Register a host owned by the caller and provision its initial credential |
+| `GET /hosts` | User JWT | List hosts owned by the caller (administrators see all) |
+| PATCH `/hosts/{id}` | Owner or administrator | Enable/disable host and configure lifetime threshold; administrator changes notify the owner |
+| POST `/hosts/{id}/credentials/rotate` | Owner or administrator | Rotate/revoke collector access; administrator rotations notify the owner |
+| GET `/notifications`, POST `/notifications/{id}/read` | Owner (own notifications) | List and acknowledge change notifications |
+| `GET /hosts/{id}/local-collector` | Owner or administrator | Whether the server-run collector for a localhost host is running |
+| `POST /hosts/{id}/local-collector/start` | Owner or administrator | Start the collector for a localhost host; issues a new credential (localhost only) |
+| `POST /hosts/{id}/local-collector/stop` | Owner or administrator | Stop the server-run collector for a localhost host |
+| `GET /hosts/{id}/monitoring` | Owner or administrator | Latest resource snapshot and connectivity |
+| `GET /hosts/{id}/metrics` | Owner or administrator | Recent CPU/memory snapshots |
+| `GET /hosts/{id}/processes` | Dashboard/admin | Latest paginated process list |
+| `GET /hosts/{id}/process-history` | Dashboard/admin | History by PID and creation time |
 | `PUT /api/hosts/{id}/configuration` | Administrator | Configure allowed sources and services |
-| `GET /api/collector/configuration` | Collector | Read its own host configuration |
+| `GET /collector/configuration` | Collector | Read its own host configuration |
+| `POST /collector/snapshots` | Collector | Submit atomic resource/process snapshot |
 | `POST /api/ingest/logs` | Collector | Submit a bounded log batch |
 | `POST /api/ingest/services` | Collector | Submit ordered service observations |
 | `POST /api/ingest/heartbeat` | Collector | Report connectivity and source/spool status |
@@ -290,6 +409,10 @@ outcome can be established. Query APIs never return an empty success response to
 hide database or collection failures.
 
 ## 9. Service health and alerts
+
+This section is a planned contract. The current resource collector reports native
+process state but does not query Windows Services/systemd service health or run
+these rules. Long-running classification does not create an alert.
 
 Keep these independent:
 
@@ -345,11 +468,13 @@ events arrive; serialize its writes with normal backend database access.
 - Store only credential digests centrally; keep collector secrets in protected
   local configuration and transmit them only with TLS outside isolated development.
 - Collector tokens cannot read other hosts' data or perform administrator actions.
-- Use a separate simple administrator login/token for dashboard and configuration APIs.
-  Multi-user roles can wait, but remote deployment cannot defer authentication.
-- Do not persist administrator secrets in browser local storage; use an in-memory
-  credential for a simple prototype or a protected session if login is implemented.
-- Restrict CORS origins, request sizes, and ingestion rate.
+- Use implemented user login/JWT authentication for dashboard reads and enabled-admin
+  checks for host/configuration changes. Bootstrap the first admin with `create-admin`.
+- Access JWTs stay in browser memory; refresh JWTs use `sessionStorage` and are
+  accessible to page JavaScript. No server-side logout/revocation is implemented.
+  Protected-session/HttpOnly-cookie hardening and refresh rotation are future work.
+- CORS and monitoring upload sizes are restricted. Ingestion/login rate limiting,
+  tighter public-registration policy, and operational hardening remain deployment work.
 - Run collectors with the minimum permissions required by enabled sources.
 - Never execute commands supplied through log content or arbitrary dashboard inputs.
 - Treat log messages as untrusted text; render without raw HTML.
@@ -358,21 +483,37 @@ events arrive; serialize its writes with normal backend database access.
 
 ## 11. Implementation milestones
 
-| Milestone | Deliverable and completion check |
+| Milestone | Status and completion check |
 | --- | --- |
-| 1. Foundation | SQLite migrations, host registration, scoped tokens, and batch ingestion; cross-host submissions rejected |
-| 2. Windows logs | System/Application collection displayed in React; restart/retry does not duplicate records |
-| 3. WSL logs | Separate Linux host with existing journal/application/authentication records where available; unsupported sources visible |
-| 4. Health monitoring | Configured Windows/Linux service observations, heartbeat freshness, and transition history |
-| 5. Alerts and search | Service failure/recovery, repeated-error rules, acknowledgement, and paginated filters |
-| 6. Remote verification | Same collector on another machine successfully sends authenticated HTTPS batches |
-| 7. Demo and documentation | Setup guide, failure/recovery evidence, retention/backup instructions, and known limitations |
+| Foundation and accounts | Implemented: async pool, migrations, auth/admin UI, account APIs, host registration, and credentials |
+| Resource/process monitoring | Implemented: psutil sampling, atomic ingestion, history, threshold classification, filtering, and Machines UI |
+| Native Linux/remote verification | Pending: Linux code/fixtures exist; verify WSL/Linux runtime and a separate HTTPS host |
+| Windows logs | Pending: existing System/Application records, checkpoints, ingestion, and log view |
+| Linux logs | Pending: available existing journal/application/auth sources, permissions, and audit support checks |
+| OS service monitoring | Inventory and current state implemented; pending: freshness, state transitions, and alerts |
+| Alerts and log search | Pending: failure/error-burst rules, acknowledgement/recovery, and log filters |
+| Reports and final delivery | Partial: technical guides/designs updated; reports, full demo evidence, and presentation pending |
 
 Windows and WSL testing verifies the collection adapters, not external network
 support by itself. A separate machine/VM reaching the backend is required to verify
 the remote milestone.
 
 ## 12. Verification scenarios
+
+### Verified for the current implementation
+
+- 48 backend tests covering auth, admin CLI, pool lifecycle, monitoring migrations,
+  credential scoping, bounds, retries/conflicts, retention, process identity,
+  runtime threshold boundaries, and permission/zombie fixtures.
+- Real Windows sampling and CPU deltas; standalone collector subprocess uploads
+  through HTTP into isolated SQLite, followed by monitoring/process query checks.
+- Frontend TypeScript build/lint, desktop/mobile browser checks, process navigation,
+  freshness, empty Linux-host state, visibility counts, and table scroll behavior.
+
+Linux fixtures and an empty registered Linux host do not verify native Linux
+collection. Native WSL/Linux and separate-host HTTPS checks are still required.
+
+### Remaining verification for planned log/service features
 
 - Collect actual Windows System/Application records and WSL journal records where available.
 - Read existing application records from installed software on both platforms
@@ -394,6 +535,12 @@ Polling introduces detection delay. WSL stops collecting when its distribution i
 not running, and its journal/audit capabilities may differ from a full Linux server.
 Source retention can remove unread logs during prolonged outages. SQLite and one
 backend instance target a small demonstration, not high-volume enterprise workloads.
+
+All-visible-process history can grow quickly and sampling can exceed the nominal
+poll interval. Benchmark the intended host/process count before setting retention
+and cadence. The resource spool holds one pending snapshot; outages have gaps.
+Native WSL validation was unavailable because no distribution was installed during
+the current checks. No external HTTPS deployment has yet been verified.
 
 Future extensions include a full Linux VM for audit testing, richer user roles,
 notification delivery, installer packaging, and PostgreSQL only if measured workload

@@ -6,24 +6,16 @@ import { AccountsDirectory } from './AccountsDirectory'
 import { AdminPanel } from './AdminPanel'
 import { DashboardLayout } from './DashboardLayout'
 import { HealthCard } from './HealthCard'
+import { MachinesMonitoring } from './MachinesMonitoring'
+import { ProfileCard } from './ProfileCard'
 import { SessionCard } from './SessionCard'
 import { StatStrip } from './StatStrip'
-import {
-  DEFAULT_ACCOUNT_FILTERS,
-  ROLE_OPTIONS,
-  SORT_OPTIONS,
-  STATUS_OPTIONS,
-  type AccountFilters,
-  type RoleFilter,
-  type SortKey,
-  type StatusFilter,
-} from './accountFilters'
 import { healthStats } from './healthStats'
 import type { NavGroup } from './navigation'
 
 const HEALTH_POLL_INTERVAL_MS = 10_000
 
-type AdminSection = 'overview' | 'system' | 'accounts' | 'session'
+type AdminSection = 'overview' | 'system' | 'machines' | 'accounts' | 'session'
 
 const NAV: NavGroup[] = [
   {
@@ -31,6 +23,7 @@ const NAV: NavGroup[] = [
     items: [
       { id: 'overview', label: 'Overview', icon: 'overview' },
       { id: 'system', label: 'System health', icon: 'system' },
+      { id: 'machines', label: 'Machines', icon: 'machines' },
     ],
   },
   {
@@ -51,6 +44,10 @@ const SECTION_META: Record<AdminSection, { title: string; description: string }>
     title: 'System health',
     description: 'Live status of the ServerPulse API and its database, refreshed automatically.',
   },
+  machines: {
+    title: 'Machines',
+    description: 'Resource and process health for your registered Windows and Linux hosts.',
+  },
   accounts: {
     title: 'Administrators',
     description: 'Grant administrator privileges to trusted operator accounts.',
@@ -65,56 +62,9 @@ export function AdminDashboard() {
   const { user } = useAuth()
   const health = useHealth(HEALTH_POLL_INTERVAL_MS)
   const [section, setSection] = useState<AdminSection>('overview')
-  const [filters, setFilters] = useState<AccountFilters>(DEFAULT_ACCOUNT_FILTERS)
   const [accountsVersion, setAccountsVersion] = useState(0)
   const meta = SECTION_META[section]
   const username = user?.username ?? ''
-
-  function updateFilters(patch: Partial<AccountFilters>) {
-    setFilters((current) => ({ ...current, ...patch }))
-  }
-
-  const controls =
-    section === 'accounts' ? (
-      <>
-        <select
-          className="topbar-select"
-          aria-label="Filter by role"
-          value={filters.role}
-          onChange={(event) => updateFilters({ role: event.target.value as RoleFilter })}
-        >
-          {ROLE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="topbar-select"
-          aria-label="Filter by status"
-          value={filters.status}
-          onChange={(event) => updateFilters({ status: event.target.value as StatusFilter })}
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <select
-          className="topbar-select"
-          aria-label="Sort accounts"
-          value={filters.sort}
-          onChange={(event) => updateFilters({ sort: event.target.value as SortKey })}
-        >
-          {SORT_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </>
-    ) : undefined
 
   return (
     <DashboardLayout
@@ -122,9 +72,6 @@ export function AdminDashboard() {
       groups={NAV}
       activeId={section}
       onSelect={(id) => setSection(id as AdminSection)}
-      query={filters.query}
-      onQueryChange={(query) => updateFilters({ query })}
-      controls={controls}
       health={health}
       title={meta.title}
       description={meta.description}
@@ -167,18 +114,21 @@ export function AdminDashboard() {
         </section>
       )}
 
+      {section === 'machines' && <MachinesMonitoring />}
+
       {section === 'accounts' && (
         <div className="accounts-layout">
           <div className="content-narrow">
             <AdminPanel onCreated={() => setAccountsVersion((version) => version + 1)} />
           </div>
-          <AccountsDirectory filters={filters} refreshKey={accountsVersion} />
+          <AccountsDirectory refreshKey={accountsVersion} />
         </div>
       )}
 
       {section === 'session' && (
         <section className="grid">
           <SessionCard username={username} privileges="Administrator" />
+          <ProfileCard />
         </section>
       )}
     </DashboardLayout>

@@ -1,9 +1,11 @@
 import { api } from './client'
 import type {
+  ChangePasswordRequest,
   HealthResponse,
   LoginRequest,
   LoginResponse,
   RegisterUserRequest,
+  UpdateProfileRequest,
   UserResponse,
 } from './types'
 
@@ -25,6 +27,15 @@ export async function createAdmin(body: RegisterUserRequest): Promise<UserRespon
 export async function getCurrentUser(signal?: AbortSignal): Promise<UserResponse> {
   const { data } = await api.get<UserResponse>('/users/me', { signal })
   return data
+}
+
+export async function updateProfile(body: UpdateProfileRequest): Promise<UserResponse> {
+  const { data } = await api.patch<UserResponse>('/users/me', body)
+  return data
+}
+
+export async function changePassword(body: ChangePasswordRequest): Promise<void> {
+  await api.post('/users/me/password', body)
 }
 
 export async function listUsers(signal?: AbortSignal): Promise<UserResponse[]> {

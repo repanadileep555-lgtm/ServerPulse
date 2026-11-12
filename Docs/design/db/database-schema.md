@@ -1,8 +1,14 @@
 # ServerPulse SQLite Schema
 
-Proposed SQLite database for the FastAPI backend, aligned with the
-[High-Level Design](HLD.md). This is executable reference DDL for a new database,
-not an applied migration or a migration script for an existing database.
+SQLite database design for the FastAPI backend, aligned with the
+[High-Level Design](../machine/HLD.md) and [roadmap](../../roadmap.md).
+The authoritative complete DDL is [schema.sql](../../../Backend/db/schema/schema.sql);
+install/upgrade databases using the migration runner, not the partial excerpt below.
+
+Migrations `0001_initial`, `0002_users`, and `0003_monitoring` define the current
+schema. Runtime support exists for users, host credentials, resource snapshots,
+process history, and monitoring receipts. Log/service ingestion and alert evaluation
+remain planned even though their tables exist.
 
 Scope: Windows localhost, local WSL distributions, and external Windows/Linux
 hosts. Collectors poll their own machines and push authenticated batches to the
@@ -22,14 +28,58 @@ a custom/demo application or a log generator.
 | Deduplication | `UNIQUE (source_id, source_record_id)` on `log_events` |
 | Unavailable sources | `last_status = 'unavailable'` is kept separate from "no events" |
 | Service state | Ordered observations and transitions; collection errors, staleness, and stopped state are separate |
-| Timestamps | UTC ISO-8601 text (`YYYY-MM-DDTHH:MM:SS.sssZ`) |
+| Resource/process monitoring | Migration `0003_monitoring`; per-host CPU/memory and all-visible-process snapshots |
+| Runtime classification | PID + creation time identity; host threshold defaults to 3600 seconds, informational only |
+| Monitoring retention | 24-hour query window, cleanup on host ingestion; receipts retained seven days |
+| Timestamps | UTC ISO-8601 text; SQL defaults use milliseconds, monitoring normalization uses microseconds |
 | Alerts | Service failure and N error/critical records from one source in M minutes |
-| Authentication | Per-host collector token digests; separate administrator credential configured outside this schema |
-| User roles | Advanced multi-user roles deferred; authentication is required for remote access |
+| Authentication | Host collector token digests; user access/refresh JWTs backed by Argon2-hashed user accounts |
+| User roles | Admin/viewer checks implemented; granular roles and JWT revocation remain future work |
 
 ## Schema
 
 The entity-relationship diagram is in [ERD.md](ERD.md).
+
+## Resource and process tables
+
+Migration [0003_monitoring.up.sql](../../../Backend/db/migrations/0003_monitoring.up.sql)
+is the executable extension to the base DDL below. The consolidated
+[schema.sql](../../../Backend/db/schema/schema.sql) includes it for fresh databases;
+use the migration runner for existing databases. Do not edit applied migrations.
+
+| Table / column | Purpose and invariants |
+| --- | --- |
+| `hosts.long_running_seconds` | Integer 60-31536000, default 3600; per-host informational lifetime threshold |
+| `monitoring_samples` | Host FK, UTC observed/received times, CPU 0-100, total/available/used memory, memory percentage, visible/denied/vanished counts, long-running and nullable zombie counts |
+| `process_samples` | Composite PK `(sample_id, pid)`; nullable creation time, name, native state, normalized CPU, RSS, memory percentage, runtime, classifications, permission flag |
+| `monitoring_receipts` | PK `(host_id, batch_id)`, payload digest, accepted time, nullable sample FK with `ON DELETE SET NULL` |
+
+Samples own process rows with cascade delete. Identity queries join samples by
+host and use PID **plus creation time**, not PID alone. Unknown fields remain NULL;
+Windows zombie fields/counts are NULL/not applicable. Counts describe visible
+observations, not guaranteed unrestricted process visibility.
+
+Ingestion inserts a complete sample, processes, receipt, and heartbeat atomically.
+The host comes from the credential; retries of the same ID require the same
+payload digest. Latest uses observed time then ID, so delayed batches do not
+replace newer snapshots. A mismatched registered platform is rejected.
+
+History queries exclude observations older than 24 hours. On a new ingestion,
+delete older samples for that host (cascading process rows) and receipts older than
+seven days. A receipt can acknowledge an already-deleted sample with a NULL
+sample ID. Snapshots outside the 24-hour window are rejected unless their existing
+receipt establishes a committed duplicate. Offline hosts can retain a stale last
+sample until new ingestion; this is intentionally visible, not current health.
+
+This design adds no resource alert rule or automatic remediation: long-running
+processes are informational. Read access is for enabled dashboard users;
+registration/configuration/token rotation require an enabled administrator.
+
+## Base host, log, service, and alert schema
+
+The following excerpt corresponds to `0001_initial`. User tables are added by
+`0002_users`, and the monitoring extension above by `0003_monitoring`. Applying
+only this excerpt does not install the complete current schema.
 
 ```sql
 PRAGMA foreign_keys = ON;
@@ -206,6 +256,9 @@ CREATE INDEX ix_alerts_status_time ON alerts (status, triggered_at);
 
 ## Notes
 
+Log/source/service/alert behavior below describes the **planned** implementation
+contract; the current resource collector does not execute these paths.
+
 ### Existing sources
 
 - Windows uses existing System, Application, and Security Event Log channels.
@@ -230,9 +283,10 @@ CREATE INDEX ix_alerts_status_time ON alerts (status, triggered_at);
   Alert targets must additionally match their rule in backend validation.
 - `name` is an administrator-assigned display label, not a network address or
   authentication identity. WSL and its parent Windows machine have separate host IDs.
-- `last_heartbeat_at` is backend receipt time. Connectivity is computed from its
-  age and must not overwrite service state. `collector_status_json` stores bounded,
-  validated diagnostics such as version, spool pressure, or collection-gap warnings.
+- `last_heartbeat_at` is backend receipt time of a newly committed monitoring
+  snapshot; 60 seconds without one means offline. It must not overwrite service
+  state. `collector_status_json` is reserved for future diagnostics; the current
+  collector does not populate it.
 - All timestamps use the fixed UTC format above. Backend validation enforces
   formatting, timestamp quality, JSON shapes, and field lengths; SQLite TEXT alone
   does not validate these. Fallback timestamps retain the original value in
@@ -291,6 +345,8 @@ CREATE INDEX ix_alerts_status_time ON alerts (status, triggered_at);
 - Delete expired log records in small batches using configurable retention.
   Rule/alert and receipt retention require separate policies.
 - Keep SQLite on local backend storage and use its backup API for live backups.
-- Administrator authentication can use a separate protected configured credential;
-  no plaintext administrator or collector secrets belong in these tables.
-  `users` (username, password hash, admin flag) and `user_tokens` (digest, capability, expiry, revocation) are now in migration `0002_users`; `roles` remains a future addition.
+- Administrator accounts use `users` with Argon2 password hashes and `is_admin`.
+  Login issues access/refresh JWTs; JWTs are not stored in `user_tokens`.
+  That table is schema-ready for a future opaque-token feature, not an implemented
+  logout/revocation store. No plaintext passwords or collector secrets belong here.
+  Granular `roles` remain a future addition.

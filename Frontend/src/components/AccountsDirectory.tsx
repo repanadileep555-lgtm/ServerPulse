@@ -2,10 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { ApiError } from '../api/client'
 import { listUsers } from '../api/endpoints'
 import type { UserResponse } from '../api/types'
-import { applyAccountFilters, type AccountFilters } from './accountFilters'
+import { UserAvatar } from './UserAvatar'
 
 interface AccountsDirectoryProps {
-  filters: AccountFilters
   refreshKey: number
 }
 
@@ -15,7 +14,7 @@ interface DirectoryState {
   error: string | null
 }
 
-export function AccountsDirectory({ filters, refreshKey }: AccountsDirectoryProps) {
+export function AccountsDirectory({ refreshKey }: AccountsDirectoryProps) {
   const [state, setState] = useState<DirectoryState>({ users: [], loading: true, error: null })
 
   useEffect(() => {
@@ -33,7 +32,10 @@ export function AccountsDirectory({ filters, refreshKey }: AccountsDirectoryProp
     return () => controller.abort()
   }, [refreshKey])
 
-  const visible = useMemo(() => applyAccountFilters(state.users, filters), [state.users, filters])
+  const sorted = useMemo(
+    () => [...state.users].sort((a, b) => a.username.localeCompare(b.username)),
+    [state.users],
+  )
 
   return (
     <article className="card">
@@ -41,7 +43,7 @@ export function AccountsDirectory({ filters, refreshKey }: AccountsDirectoryProp
         <div>
           <h2>Accounts</h2>
           <p className="muted small card-subtitle">
-            {state.loading ? 'Loading…' : `Showing ${visible.length} of ${state.users.length}`}
+            {state.loading ? 'Loading…' : `${state.users.length} ${state.users.length === 1 ? 'account' : 'accounts'}`}
           </p>
         </div>
       </div>
@@ -52,18 +54,18 @@ export function AccountsDirectory({ filters, refreshKey }: AccountsDirectoryProp
         </p>
       )}
 
-      {!state.loading && !state.error && visible.length === 0 && (
-        <p className="muted">No accounts match the current search and filters.</p>
+      {!state.loading && !state.error && sorted.length === 0 && (
+        <p className="muted">No accounts found.</p>
       )}
 
-      {visible.length > 0 && (
+      {sorted.length > 0 && (
         <ul className="account-list" aria-label="Accounts">
-          {visible.map((user) => (
+          {sorted.map((user) => (
             <li key={user.id} className="account-row">
-              <span className="avatar avatar-sm" aria-hidden="true">
-                {user.username.slice(0, 2).toUpperCase()}
+              <UserAvatar avatar={user.avatar} title={`@${user.username}`} />
+              <span className="account-name" title={`@${user.username}`}>
+                {user.display_name || user.username}
               </span>
-              <span className="account-name">{user.username}</span>
               <span className={`account-role ${user.is_admin ? 'account-role-admin' : ''}`}>
                 {user.is_admin ? 'Administrator' : 'Member'}
               </span>

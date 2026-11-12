@@ -13,6 +13,7 @@ DB_MIGRATIONS_DIR = BACKEND_DIR / "db" / "migrations"
 DB_POOL_SIZE = 5
 DB_TIMEOUT_SECONDS = 10.0
 DB_BUSY_TIMEOUT_MS = 5000
+CREDENTIAL_KEY_PATH = STORE_DIR / "credential.key"
 
 
 class Settings(BaseSettings):

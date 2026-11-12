@@ -68,9 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus('signed-out')
   }, [])
 
+  const updateUser = useCallback((profile: UserResponse) => setUser(profile), [])
+
   const value = useMemo<AuthContextValue>(
-    () => ({ status, user, signIn, register, signOut }),
-    [status, user, signIn, register, signOut],
+    () => ({ status, user, signIn, register, signOut, updateUser }),
+    [status, user, signIn, register, signOut, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

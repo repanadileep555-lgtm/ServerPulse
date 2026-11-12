@@ -1,4 +1,4 @@
-export type NavIconName = 'overview' | 'system' | 'account' | 'accounts' | 'session' | 'collapse' | 'signout' | 'refresh'
+export type NavIconName = 'overview' | 'system' | 'machines' | 'account' | 'accounts' | 'session' | 'collapse' | 'signout' | 'refresh' | 'bell'
 
 export interface NavItem {
   id: string

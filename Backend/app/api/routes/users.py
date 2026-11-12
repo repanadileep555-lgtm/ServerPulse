@@ -1,21 +1,24 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.auth.jwt_service import JWTService, get_jwt_service
 from app.db.db_client import get_database_pool
 from app.db.db_pool import DatabasePool
 from app.middleware.auth_middleware import AuthenticatedUser, get_current_user
 from app.schemas.user import (
+    ChangePasswordRequest,
     LoginRequest,
     LoginResponse,
     RefreshRequest,
     RefreshResponse,
     RegisterUserRequest,
+    UpdateProfileRequest,
     UserResponse,
 )
 from app.services.user_service import (
     DuplicateUsernameError,
+    IncorrectPasswordError,
     InvalidCredentialsError,
     InvalidRefreshTokenError,
     UserService,
@@ -55,6 +58,46 @@ async def me(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+_ACCOUNT_UNAVAILABLE = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Account is not available",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    request: UpdateProfileRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    service: Annotated[UserService, Depends(get_user_service)],
+) -> UserResponse:
+    user = await service.update_profile(
+        current_user.subject, request.model_dump(exclude_unset=True)
+    )
+    if user is None:
+        raise _ACCOUNT_UNAVAILABLE
+    return user
+
+
+@router.post("/me/password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
+    service: Annotated[UserService, Depends(get_user_service)],
+) -> Response:
+    try:
+        updated = await service.change_password(
+            current_user.subject,
+            request.current_password.get_secret_value(),
+            request.new_password.get_secret_value(),
+        )
+    except IncorrectPasswordError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not updated:
+        raise _ACCOUNT_UNAVAILABLE
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("", response_model=list[UserResponse])
