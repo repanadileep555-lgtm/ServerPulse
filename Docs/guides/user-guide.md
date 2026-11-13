@@ -112,6 +112,10 @@ Select a machine with deployment type `localhost` and use **Start collector** in
 The backend starts the collector process for you. Starting issues a new credential, so any other
 collector still using the old credential for that machine stops being accepted.
 
+**How do I start a WSL collector?**
+Run it from inside the registered WSL distribution; the dashboard's **Start collector** button
+does not launch WSL processes. Follow the [Linux and WSL collector setup guide](setup/linux.md).
+
 **Why can't I see a machine someone else registered?**
 You only see the machines you registered. Administrators can see every machine.
 

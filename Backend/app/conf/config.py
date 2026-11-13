@@ -19,7 +19,7 @@ CREDENTIAL_KEY_PATH = STORE_DIR / "credential.key"
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="SERVERPULSE_", env_file=".env")
 
-    host: str = "127.0.0.1"
+    host: str = "0.0.0.0"
     port: int = 8000
     cors_origins: list[str] = ["http://localhost:5173"]
     jwt_secret_key: str = Field(default_factory=lambda: secrets.token_urlsafe(32))

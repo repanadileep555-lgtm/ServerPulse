@@ -49,10 +49,9 @@ npm run dev
 Open <http://localhost:5173>. API documentation is at
 <http://127.0.0.1:8000/docs> and uses locally served assets.
 
-Sign in as an administrator, open **Machines**, register a host, and copy its
-one-time collector token. Follow the [collector setup](Backend/README.md#machine-resource-and-process-monitoring)
-to run `collect-host` on that machine. Registration alone does not collect data.
-WSL needs its own Linux collector and a backend address reachable from the distribution.
+Sign in, open **Machines**, register a host, and copy its one-time collector token.
+Registration alone does not collect data. Follow the [Windows collector setup](Docs/guides/setup/windows.md)
+or [Linux and WSL collector setup](Docs/guides/setup/linux.md) to install and run `collect-host`.
 
 ## Documentation
 

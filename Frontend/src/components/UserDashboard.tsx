@@ -5,7 +5,6 @@ import { DashboardLayout } from './DashboardLayout'
 import { MachinesMonitoring } from './MachinesMonitoring'
 import { ProfileCard } from './ProfileCard'
 import { SessionCard } from './SessionCard'
-import { StatStrip } from './StatStrip'
 import type { NavGroup } from './navigation'
 
 type UserSection = 'overview' | 'machines' | 'account'
@@ -32,71 +31,121 @@ function UserOverview({ onNavigate }: { onNavigate: (section: UserSection) => vo
 
   const countsReady = !hosts.loading && !hosts.error
   const onlineCount = hosts.items.filter((host) => host.connectivity === 'online').length
+  const attentionCount = hosts.items.filter((host) => host.connectivity === 'offline' || host.connectivity === 'never_seen').length
   const hasMachines = hosts.items.length > 0
 
   return (
-    <>
-      <StatStrip
-        items={[
-          { label: 'Role', value: 'Member', tone: 'accent' },
-          { label: 'Account', value: 'Active', tone: 'success' },
-          { label: 'Machines', value: countsReady ? String(hosts.items.length) : '—' },
-          { label: 'Online', value: countsReady ? String(onlineCount) : '—', tone: onlineCount > 0 ? 'success' : undefined },
-        ]}
-      />
+    <section className="overview-page member-overview">
+      <div className="overview-hero overview-hero-member">
+        <div className="overview-hero-copy">
+          <p className="overview-kicker">YOUR WORKSPACE <span>/</span> LIVE MONITORING</p>
+          <h2>Every machine.<br />One clear picture.</h2>
+          <p>Keep an eye on host status and resource health from a single place.</p>
+          <div className="overview-hero-actions">
+            <button type="button" className="btn btn-primary" onClick={() => onNavigate('machines')}>
+              {hasMachines ? 'Open machines' : 'Add your first machine'} <span aria-hidden="true">→</span>
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={() => onNavigate('account')}>
+              Account settings
+            </button>
+          </div>
+        </div>
+        <div className="overview-member-art" aria-hidden="true">
+          <div className="overview-orbit overview-orbit-outer" />
+          <div className="overview-orbit overview-orbit-inner" />
+          <div className="overview-orbit-core"><span /></div>
+          <span className="overview-orbit-node overview-orbit-node-one" />
+          <span className="overview-orbit-node overview-orbit-node-two" />
+          <span className="overview-orbit-node overview-orbit-node-three" />
+          <span className="overview-art-label">HOST NETWORK</span>
+        </div>
+      </div>
+
+      <div className="overview-metrics" aria-label="Machine summary">
+        <article className="overview-metric-card">
+          <span className="overview-metric-icon overview-metric-icon-blue" aria-hidden="true">▦</span>
+          <div><span>Registered machines</span><strong>{countsReady ? hosts.items.length : '—'}</strong></div>
+          <span className="overview-metric-note">in your workspace</span>
+        </article>
+        <article className="overview-metric-card">
+          <span className="overview-metric-icon overview-metric-icon-green" aria-hidden="true">↗</span>
+          <div><span>Online</span><strong>{countsReady ? onlineCount : '—'}</strong></div>
+          <span className="overview-metric-note">reporting normally</span>
+        </article>
+        <article className={`overview-metric-card${attentionCount > 0 ? ' overview-metric-attention' : ''}`}>
+          <span className="overview-metric-icon overview-metric-icon-amber" aria-hidden="true">!</span>
+          <div><span>Needs attention</span><strong>{countsReady ? attentionCount : '—'}</strong></div>
+          <span className="overview-metric-note">offline or not connected</span>
+        </article>
+      </div>
+
       {hosts.error && <p className="machine-alert machine-alert-error" role="alert">{hosts.error}</p>}
-      {hosts.loading ? (
-        <p className="muted"><span className="spinner" aria-hidden="true" /> Loading your machines…</p>
-      ) : hosts.error ? null : hasMachines ? (
-        <section className="grid">
-          <article className="card">
-            <div className="card-header">
-              <h2>Your machines</h2>
+      <section className="overview-host-section" aria-labelledby="overview-hosts-title">
+        <div className="overview-section-heading">
+          <div>
+            <p className="overview-kicker">FLEET SNAPSHOT</p>
+            <h2 id="overview-hosts-title">Your machines</h2>
+          </div>
+          <button type="button" className="overview-text-link" onClick={() => onNavigate('machines')}>
+            View all machines <span aria-hidden="true">→</span>
+          </button>
+        </div>
+        {hosts.loading ? (
+          <div className="overview-state-card"><span className="spinner" aria-hidden="true" /> Loading your machines…</div>
+        ) : hosts.error ? null : hasMachines ? (
+          <div className="overview-host-grid">
+            {hosts.items.slice(0, 4).map((host) => {
+              const statusLabel = host.connectivity === 'never_seen'
+                ? 'Not connected'
+                : host.connectivity === 'disabled'
+                  ? 'Disabled'
+                  : host.connectivity === 'online' ? 'Online' : 'Offline'
+              const cpu = host.cpu_percent === null ? null : Math.max(0, Math.min(100, host.cpu_percent))
+              const memory = host.memory_percent === null ? null : Math.max(0, Math.min(100, host.memory_percent))
+              return (
+                <article className="overview-host-card" key={host.id}>
+                  <div className="overview-host-heading">
+                    <span className={`overview-host-symbol overview-host-symbol-${host.platform}`} aria-hidden="true">
+                      {host.platform === 'windows' ? 'W' : 'L'}
+                    </span>
+                    <span className={`overview-host-status overview-host-status-${host.connectivity}`}>
+                      <span aria-hidden="true" />{statusLabel}
+                    </span>
+                  </div>
+                  <h3>{host.name}</h3>
+                  <p className="overview-host-meta">{host.platform === 'windows' ? 'Windows' : 'Linux'} <span>·</span> {host.deployment_type}</p>
+                  <div className="overview-host-meters">
+                    <div className="overview-host-meter">
+                      <div><span>CPU</span><strong>{cpu === null ? '—' : `${cpu.toFixed(1)}%`}</strong></div>
+                      <span className="overview-host-track"><span style={{ width: `${cpu ?? 0}%` }} /></span>
+                    </div>
+                    <div className="overview-host-meter">
+                      <div><span>Memory</span><strong>{memory === null ? '—' : `${memory.toFixed(1)}%`}</strong></div>
+                      <span className="overview-host-track overview-host-track-memory"><span style={{ width: `${memory ?? 0}%` }} /></span>
+                    </div>
+                  </div>
+                  {host.metrics_sampled_at && (
+                    <p className="overview-host-updated">Updated {new Date(host.metrics_sampled_at).toLocaleTimeString()}</p>
+                  )}
+                </article>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="overview-empty-state">
+            <span className="overview-empty-icon" aria-hidden="true">＋</span>
+            <div>
+              <p className="overview-kicker">GET STARTED</p>
+              <h3>Bring your first machine online</h3>
+              <p>Register a host, start its collector, and live CPU and memory readings will appear here.</p>
             </div>
-            <dl className="meta">
-              {hosts.items.map((host) => (
-                <div key={host.id}>
-                  <dt>{host.name}</dt>
-                  <dd>
-                    {host.platform === 'windows' ? 'Windows' : 'Linux'} · {host.deployment_type} · {host.connectivity === 'online' ? 'Online' : host.connectivity === 'disabled' ? 'Disabled' : 'Not online'}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </article>
-        </section>
-      ) : (
-        <section className="grid">
-          <article className="card">
-            <div className="card-header">
-              <h2>Get started</h2>
-            </div>
-            <p className="muted">No machines are registered yet. Add one to start monitoring its CPU, memory, and processes.</p>
-            <ol className="setup-steps">
-              <li>
-                <strong>Register a machine.</strong> Open Machines, enter a name, platform, and deployment type, then copy the collector token shown once.
-              </li>
-              <li>
-                <strong>Run the collector.</strong> Follow Collector setup help on the Machines page to install it and start it with that token.
-              </li>
-              <li>
-                <strong>Confirm the first snapshot.</strong> The machine shows Online and its resource readings once the collector uploads data.
-              </li>
-            </ol>
-          </article>
-        </section>
-      )}
-      <section className="quick-actions" aria-label="Quick actions">
-        <button type="button" className="action-tile" onClick={() => onNavigate('machines')}>
-          <strong>{hasMachines ? 'Open machines' : 'Register a machine'}</strong>
-          <span>{hasMachines ? 'Review resource and process health for your hosts.' : 'Add a Windows or Linux host to start monitoring.'}</span>
-        </button>
-        <button type="button" className="action-tile" onClick={() => onNavigate('account')}>
-          <strong>Review your account</strong>
-          <span>Profile and current session details.</span>
-        </button>
+            <button type="button" className="btn btn-primary" onClick={() => onNavigate('machines')}>
+              Set up a machine <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        )}
       </section>
-    </>
+    </section>
   )
 }
 

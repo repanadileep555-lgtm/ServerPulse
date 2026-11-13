@@ -17,6 +17,17 @@ Documentation JavaScript, CSS, and favicon assets are served locally using
 `fastapi-offline`; no CDN access is required after dependencies are installed.
 After dependency changes, run `uv sync` and restart the backend.
 
+Windows and WSL must not share a virtual environment. When running backend
+commands from WSL in this Windows checkout, set a WSL-native environment path
+before syncing or running commands:
+
+```bash
+export UV_PROJECT_ENVIRONMENT="$HOME/.cache/serverpulse-backend-venv"
+uv sync
+```
+
+Keep that variable set for subsequent `uv run` commands in the same shell.
+
 Startup initializes one async pool; migrations are an explicit separate step.
 The configured database is `Store/serverpulse.db` relative to the repository root.
 Use `uv run python db\migrate.py down` only for an intentional rollback: rolling
@@ -120,23 +131,15 @@ provisioning. Restrict it and add login rate limiting before wider deployment.
    threshold defaults to 3600 seconds.
 3. Copy the one-time collector token. Only its SHA-256 digest is stored. Rotation
    revokes previous collector credentials; disabling a host rejects further pushes.
-4. On each monitored machine, install this backend package with Python 3.14+ and
-   `uv sync`. The collector does not need a local database, an administrator JWT,
-   or the backend server running on that machine.
-5. Set `SERVERPULSE_COLLECTOR_TOKEN` in that collector's environment without
-   committing it to a file or Git, then run:
-
-   ```powershell
-   uv run collect-host --url http://127.0.0.1:8000 --state-file collector-state.json
-   ```
-
-   For WSL run the collector inside the distribution, not from Windows Python.
-   Use the Windows backend address reachable from WSL. External hosts use a
-   reachable HTTPS backend origin. `--allow-http` is for trusted isolated labs
-   only when loopback is not available; never disable TLS certificate validation.
-   `--once` sends one snapshot and exits; `--interval 10` controls collection.
-   Sampling never overlaps: on machines with many processes, the effective interval
-   is at least the time needed to finish collection and delivery.
+4. On each monitored machine, install the collector with Python 3.14+ and `uv`.
+   It does not need a local database, an administrator JWT, or the backend server
+   running on that machine. Follow the setup guide for the operating system:
+   [Windows](../Docs/guides/setup/windows.md) or [Linux/WSL](../Docs/guides/setup/linux.md).
+5. The collector requires the token issued for that machine. Remote collectors
+   should use a reachable HTTPS backend origin; `--allow-http` is only for trusted,
+   isolated labs. `--once` sends one snapshot and exits; `--interval 10` controls
+   collection. Sampling never overlaps: on machines with many processes, the
+   effective interval is at least the time needed to finish collection and delivery.
 
 The collector reads real CPU, physical/guest memory, and every visible process
 using `psutil`. WSL reports its Linux environment's resources, not total physical

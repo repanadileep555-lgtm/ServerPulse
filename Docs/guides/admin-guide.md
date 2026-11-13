@@ -87,49 +87,17 @@ registered by the same user.
 
 Registration alone does not collect data. Continue with section 4 on the monitored machine.
 
-## 4. Running the collector on a machine
+## 4. Setting up the collector
 
-The collector runs from the `Backend` folder of the ServerPulse code. Install it once per machine.
+Collector setup instructions are split by operating system and can be followed by machine owners
+or administrators:
 
-### Step A: install the collector
+- [Windows collector setup](setup/windows.md)
+- [Linux and WSL collector setup](setup/linux.md)
 
-On the monitored machine, get the ServerPulse code, then:
-
-```powershell
-Set-Location .\Backend
-uv sync
-```
-
-Database migrations are only needed on the central server. The collector does not use a database.
-
-### Step B: set the token for the current session
-
-```powershell
-$env:SERVERPULSE_COLLECTOR_TOKEN = "<paste the token here>"
-```
-
-Do not save the token in a file or in Git. Use a new PowerShell window if you want it to disappear when you close the window.
-
-### Step C: start the collector
-
-For a machine on the same computer as the server (Windows localhost):
-
-```powershell
-uv run collect-host --url http://127.0.0.1:8000 --state-file collector-state.json
-```
-
-For a WSL distribution: run these commands **inside the WSL Linux shell**, not in Windows PowerShell.
-Use the Windows host address that WSL can reach, not `127.0.0.1` (which refers to WSL itself).
-
-For an external machine: use the server's HTTPS address:
-
-```powershell
-uv run collect-host --url https://serverpulse.example.edu --state-file collector-state.json
-```
-
-`serverpulse.example.edu` is a placeholder for your server's HTTPS address.
-
-Remote machines must use HTTPS. `--allow-http` is only for a trusted, isolated lab network when HTTPS is not available. Never turn off certificate checking.
+The collector does not need a local database or administrator login. For either platform, use the
+collector token issued for that exact machine. Remote collectors should use HTTPS. `--allow-http`
+is only for trusted, isolated development or lab networks.
 
 ### Collector options
 
@@ -175,12 +143,14 @@ For the college prototype, restrict who can reach the registration endpoint. Add
 | Symptom | Likely cause and fix |
 | --- | --- |
 | Machine shows **offline** | Collector stopped, or the server address is wrong or unreachable. Check the collector window and the `--url`. |
-| Collector says "Set SERVERPULSE_COLLECTOR_TOKEN" | The variable is not set in this PowerShell window. Set it again (step B). |
+| Collector says "Set SERVERPULSE_COLLECTOR_TOKEN" | The variable is not set or exported in the shell where the collector runs. Follow the [Windows](setup/windows.md#set-the-token) or [Linux/WSL](setup/linux.md#set-the-token) token instructions. |
 | Collector says the platform does not match | The machine was registered as the wrong platform. Register it again with the correct platform. |
-| Collector reports HTTP 401 or 403 | Wrong, rotated, or disabled token. Rotate the token or enable the machine. |
+| Collector reports HTTP 401 or 403 | Wrong, malformed, rotated, or disabled token, or the machine is disabled. Re-enter the token for this exact machine; rotate it if lost or exposed. |
 | Collector reports HTTP 4xx and stops | The pending data is kept in the state file. Fix the cause, then restart. A snapshot older than 24 hours must be moved or deleted by hand; do not delete it silently. |
 | Collector reports "Pending snapshot belongs to another backend/host" | The state file came from another machine or server. Use a different `--state-file` name. |
-| WSL collector cannot connect | Run it inside WSL and use an address WSL can reach, not `127.0.0.1`. |
+| WSL collector cannot connect | Confirm the backend health check works from WSL, the backend is listening on a WSL-reachable interface, and Windows Firewall allows the required connection. In default NAT mode, use the Windows gateway address, not `127.0.0.1`. |
+| uv reports it cannot remove `Backend/.venv/Lib` from WSL | The Windows venv is on the mounted Windows drive. In WSL, unset `VIRTUAL_ENV` and set `UV_PROJECT_ENVIRONMENT` to a separate path under `$HOME` as described above; do not delete the Windows venv. |
+| WSL collector reports HTTP 401 | Re-enter the 43-character collector token for this WSL machine. If it was exposed or copied incorrectly, rotate it and enter the newly issued token. |
 | Two collectors for one machine | Stop the old one first. Only one collector should use a given state file. |
 | Dashboard data stops | Check the server is running and that `migrate.py up` has been applied after updates. |
 

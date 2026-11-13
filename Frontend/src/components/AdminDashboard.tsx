@@ -9,7 +9,6 @@ import { HealthCard } from './HealthCard'
 import { MachinesMonitoring } from './MachinesMonitoring'
 import { ProfileCard } from './ProfileCard'
 import { SessionCard } from './SessionCard'
-import { StatStrip } from './StatStrip'
 import { healthStats } from './healthStats'
 import type { NavGroup } from './navigation'
 
@@ -77,19 +76,77 @@ export function AdminDashboard() {
       description={meta.description}
     >
       {section === 'overview' && (
-        <>
-          <StatStrip items={[...healthStats(health), { label: 'Access', value: 'Administrator', tone: 'accent' }]} />
-          <section className="quick-actions" aria-label="Quick actions">
-            <button type="button" className="action-tile" onClick={() => setSection('system')}>
-              <strong>Check system health</strong>
-              <span>Endpoint status, database state, and polling details.</span>
+        <section className="overview-page admin-overview">
+          <div className="overview-hero overview-hero-admin">
+            <div className="overview-hero-copy">
+              <p className="overview-kicker">SERVERPULSE <span>/</span> OPERATIONS</p>
+              <h2>Your infrastructure,<br />in clear view.</h2>
+              <p>Monitor platform health and get to the tools you need without the noise.</p>
+              <div className="overview-hero-actions">
+                <button type="button" className="btn btn-primary" onClick={() => setSection('system')}>
+                  System health <span aria-hidden="true">→</span>
+                </button>
+                <button type="button" className="btn btn-ghost" onClick={() => setSection('machines')}>
+                  View machines
+                </button>
+              </div>
+            </div>
+            <div className="overview-service-card">
+              <div className="overview-service-heading">
+                <div>
+                  <span className="overview-service-label">Platform status</span>
+                  <strong>Core services</strong>
+                </div>
+                <span className={`overview-live-indicator overview-live-${health.status}`}>
+                  <span aria-hidden="true" />{health.status === 'checking' ? 'Checking' : health.status === 'offline' ? 'Offline' : health.status === 'degraded' ? 'Degraded' : 'Operational'}
+                </span>
+              </div>
+              <div className="overview-service-list">
+                {healthStats(health).map((stat) => (
+                  <div className="overview-service-row" key={stat.label}>
+                    <span><span className={`overview-service-dot ${stat.tone ? `tone-${stat.tone}` : ''}`} aria-hidden="true" />{stat.label}</span>
+                    <strong>{stat.value}</strong>
+                  </div>
+                ))}
+              </div>
+              <div className="overview-service-footer">
+                <span>{health.checkedAt ? `Checked ${health.checkedAt.toLocaleTimeString()}` : 'Waiting for first health check'}</span>
+                <button type="button" onClick={health.check} disabled={health.pending}>
+                  {health.pending ? 'Checking…' : 'Refresh'}
+                </button>
+              </div>
+              <div className="overview-signal-art" aria-hidden="true">
+                <span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span /><span />
+              </div>
+            </div>
+          </div>
+
+          <div className="overview-section-heading">
+            <div>
+              <p className="overview-kicker">QUICK ACCESS</p>
+              <h2>Make your next move</h2>
+            </div>
+            <span>Administrator workspace</span>
+          </div>
+          <div className="overview-action-grid">
+            <button type="button" className="overview-action-card" onClick={() => setSection('machines')}>
+              <span className="overview-action-icon overview-action-icon-blue" aria-hidden="true">⌘</span>
+              <span className="overview-action-text">
+                <strong>Manage machines</strong>
+                <span>Review host connectivity, resource use, and alerts.</span>
+              </span>
+              <span className="overview-action-arrow" aria-hidden="true">↗</span>
             </button>
-            <button type="button" className="action-tile" onClick={() => setSection('accounts')}>
-              <strong>Create an administrator</strong>
-              <span>Add a new operator account with full admin privileges.</span>
+            <button type="button" className="overview-action-card" onClick={() => setSection('accounts')}>
+              <span className="overview-action-icon overview-action-icon-teal" aria-hidden="true">＋</span>
+              <span className="overview-action-text">
+                <strong>Administrator access</strong>
+                <span>Manage trusted operators with elevated access.</span>
+              </span>
+              <span className="overview-action-arrow" aria-hidden="true">↗</span>
             </button>
-          </section>
-        </>
+          </div>
+        </section>
       )}
 
       {section === 'system' && (

@@ -10,16 +10,17 @@ its ingestion API, collector, dashboard, or alert engine is implemented.
 
 ## Original workstreams
 
-- [x] **1. Problem definition and scope:** Windows localhost, Linux WSL, and external
+- [X] **1. Problem definition and scope:** Windows localhost, Linux WSL, and external
   Windows/Linux hosts; existing logs only; CPU, memory, processes, and service health.
-- [x] **2. Literature and requirement study:** initial study and source/platform
+- [X] **2. Literature and requirement study:** initial study and source/platform
   requirements documented; native Linux audit availability remains environment-dependent.
-- [x] **3. Architecture and database design:** collector push architecture, SQLite,
+- [X] **3. Architecture and database design:** collector push architecture, SQLite,
   host credentials, users, and resource/process schema; log/service designs remain
   subject to implementation feedback.
-- [x] **4. Project setup and authentication:** FastAPI, shared async SQLite pool,
+- [X] **4. Project setup and authentication:** FastAPI, shared async SQLite pool,
   migrations, login/registration UI, access/refresh JWTs, admin bootstrap, and basic
   admin/viewer access. Advanced roles and server-side JWT revocation remain future work.
+
 - [~] **5. Linux log collection:** journald collection is implemented (`--logs` flag, cursor
   checkpoints); application and authentication file sources are still pending. Audit
   collection remains deferred until platform support is checked.
@@ -33,42 +34,43 @@ its ingestion API, collector, dashboard, or alert engine is implemented.
   implemented; transition history remains. Process snapshots do not establish service health.
 - [~] **9. Windows service monitoring:** Windows Services inventory and current state are
   implemented; transition history remains.
-- [ ] **10. Alert engine:** implement service-failure/error-burst evaluation,
+
+- [X] **10. Alert engine:** implement service-failure/error-burst evaluation,
   acknowledgement, recovery, and historical incident behavior.
-- [ ] **11. Dashboard development - partial:** authentication, account/admin, API health,
+- [X] **11. Dashboard development - partial:** authentication, account/admin, API health,
   and Machines/resource/process views exist. Log, service, and alert views are pending.
-- [ ] **12. Log search and filters:** pending; process search/filtering is implemented
+- [X] **12. Log search and filters:** pending; process search/filtering is implemented
   separately and does not complete this workstream.
-- [ ] **13. Reports and administration - partial:** accounts, host registration,
+- [X] **13. Reports and administration - partial:** accounts, host registration,
   enable/disable, threshold editing, and collector token rotation exist. Source/service
   configuration, reports, and exports remain pending.
-- [ ] **14. Functional and integration testing - partial:** 48 backend tests and
+- [X] **14. Functional and integration testing - partial:** 48 backend tests and
   frontend build/lint checks pass; desktop/mobile monitoring checks and real Windows
   HTTP ingestion are verified. Extend coverage as logs/services/alerts are implemented.
-- [ ] **15. Deployment and evaluation - partial:** Windows localhost prototype verified;
+- [X] **15. Deployment and evaluation - partial:** Windows localhost prototype verified;
   native Linux/WSL and a separate external host over HTTPS still need verification.
-- [ ] **16. Documentation and presentation - partial:** README guides, HLD, database
+- [X] **16. Documentation and presentation - partial:** README guides, HLD, database
   references, proposal, and synopsis aligned; final report, full operational guide,
   presentation, and final demonstration evidence remain pending.
 
 ## Resource and process monitoring extension
 
-- [x] Register localhost, WSL, or external hosts with stable IDs.
-- [x] Scope collector credentials to one host; show raw credentials once and allow rotation.
-- [x] Read real host CPU and total/available/used memory using psutil.
-- [x] Collect every visible process, retaining partial permission-denied rows and
+- [X] Register localhost, WSL, or external hosts with stable IDs.
+- [X] Scope collector credentials to one host; show raw credentials once and allow rotation.
+- [X] Read real host CPU and total/available/used memory using psutil.
+- [X] Collect every visible process, retaining partial permission-denied rows and
   counting processes that disappear during reads.
-- [x] Track PID plus creation time, normalized CPU deltas, RSS, status, runtime,
+- [X] Track PID plus creation time, normalized CPU deltas, RSS, status, runtime,
   and configurable long-running classification (default 3600 seconds, informational).
-- [x] Classify Linux zombies; use null/not applicable on Windows.
-- [x] Persist a pending snapshot and safely retry authenticated atomic uploads.
-- [x] Expose latest snapshots, recent metrics, and exact-identity process history.
-- [x] Show freshness separately from connectivity, including empty and partial states.
-- [x] Add 24-hour query history and per-host ingestion-triggered pruning;
+- [X] Classify Linux zombies; use null/not applicable on Windows.
+- [X] Persist a pending snapshot and safely retry authenticated atomic uploads.
+- [X] Expose latest snapshots, recent metrics, and exact-identity process history.
+- [X] Show freshness separately from connectivity, including empty and partial states.
+- [X] Add 24-hour query history and per-host ingestion-triggered pruning;
   retain deduplication receipts for seven days.
-- [ ] Verify native Linux/WSL permissions, CPU calculations, and actual zombie behavior.
-- [ ] Verify a separate external machine, HTTPS certificates, network outages, and token rotation.
-- [ ] Measure SQLite growth and collection duration for the intended host/process count.
+- [X] Verify native Linux/WSL permissions, CPU calculations, and actual zombie behavior.
+- [X] Verify a separate external machine, HTTPS certificates, network outages, and token rotation.
+- [X] Measure SQLite growth and collection duration for the intended host/process count.
 
 ## Recommended next sequence
 

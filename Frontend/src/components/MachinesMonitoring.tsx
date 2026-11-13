@@ -955,133 +955,199 @@ function AlertRulesPanel({ host }: { host: Host }) {
     <section className="machine-panel alert-rules" aria-labelledby="alert-rules-title">
       <div className="machine-section-heading">
         <div>
-          <p className="machine-eyebrow">Owner controls</p>
+          <p className="machine-eyebrow">Monitoring</p>
           <h3 id="alert-rules-title">Alert rules</h3>
+          <p className="alert-rules-description">Get notified when a machine metric crosses a threshold and stays there.</p>
         </div>
-        <span className="machine-settings-note">Owners get a bell notification when a rule fires or resolves.</span>
+        <span className="alert-rules-count">{rules.length} {rules.length === 1 ? 'rule' : 'rules'}</span>
       </div>
       {error && <p className="machine-alert machine-alert-error" role="alert">{error}</p>}
 
-      <form className="alert-rule-form" onSubmit={(event) => void submitRule(event)}>
-        <label className="machine-field">
-          <span>Name</span>
-          <input
-            type="text"
-            maxLength={80}
-            value={form.name}
-            onChange={(event) => updateForm({ name: event.target.value })}
-            required
-          />
-        </label>
-        <label className="machine-field">
-          <span>Metric</span>
-          <select value={form.metric} onChange={(event) => changeMetric(event.target.value as AlertMetric)}>
-            {options.map((option) => (
-              <option key={option.metric} value={option.metric}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-        {selected.needsProcess && (
+      <div className="alert-rule-overview" aria-label="Alert rule summary">
+        <div className="alert-rule-stat">
+          <span className="alert-rule-stat-label">Configured</span>
+          <strong>{rules.length}</strong>
+        </div>
+        <div className="alert-rule-stat">
+          <span className="alert-rule-stat-label">Enabled</span>
+          <strong>{rules.filter((rule) => rule.enabled).length}</strong>
+        </div>
+        <div className={`alert-rule-stat${rules.some((rule) => rule.firing) ? ' alert-rule-stat-firing' : ''}`}>
+          <span className="alert-rule-stat-label">Firing now</span>
+          <strong>{rules.filter((rule) => rule.firing).length}</strong>
+        </div>
+      </div>
+
+      <div className={`alert-builder${editingId !== null ? ' alert-builder-editing' : ''}`}>
+        <div className="alert-builder-heading">
+          <div>
+            <h4>{editingId === null ? 'Create a rule' : 'Edit rule'}</h4>
+            <p>{editingId === null ? 'Choose a metric and decide when it should trigger.' : 'Update the conditions for this rule.'}</p>
+          </div>
+          <span className="alert-builder-icon" aria-hidden="true">{editingId === null ? '+' : '✎'}</span>
+        </div>
+        <form className="alert-rule-form" onSubmit={(event) => void submitRule(event)}>
           <label className="machine-field">
-            <span>Process name</span>
+            <span>Rule name</span>
             <input
               type="text"
-              maxLength={256}
-              placeholder="e.g. chrome"
-              value={form.processName}
-              onChange={(event) => updateForm({ processName: event.target.value })}
+              maxLength={80}
+              placeholder="e.g. High CPU usage"
+              value={form.name}
+              onChange={(event) => updateForm({ name: event.target.value })}
               required
             />
           </label>
-        )}
-        <label className="machine-field">
-          <span>Threshold {selected.unit === '%' ? '(%)' : '(processes)'}</span>
-          <input
-            type="number"
-            min={selected.unit === '%' ? '0.1' : '1'}
-            max={selected.maxThreshold}
-            step={selected.unit === '%' ? '0.1' : '1'}
-            value={form.threshold}
-            onChange={(event) => updateForm({ threshold: event.target.value })}
-            required
-          />
-        </label>
-        <label className="machine-field">
-          <span>Sustained (minutes)</span>
-          <input
-            type="number"
-            min="1"
-            max="1440"
-            step="1"
-            value={form.sustainedMinutes}
-            onChange={(event) => updateForm({ sustainedMinutes: event.target.value })}
-            required
-          />
-        </label>
-        <label className="machine-switch">
-          <input
-            type="checkbox"
-            checked={form.enabled}
-            onChange={(event) => updateForm({ enabled: event.target.checked })}
-          />
-          <span>Enabled</span>
-        </label>
-        <div className="alert-rule-actions">
-          {editingId !== null && (
-            <button type="button" className="btn btn-ghost" onClick={cancelEditing} disabled={saving}>
-              Cancel
-            </button>
+          <label className="machine-field">
+            <span>Metric</span>
+            <select value={form.metric} onChange={(event) => changeMetric(event.target.value as AlertMetric)}>
+              {options.map((option) => (
+                <option key={option.metric} value={option.metric}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          {selected.needsProcess && (
+            <label className="machine-field">
+              <span>Process name</span>
+              <input
+                type="text"
+                maxLength={256}
+                placeholder="e.g. chrome"
+                value={form.processName}
+                onChange={(event) => updateForm({ processName: event.target.value })}
+                required
+              />
+            </label>
           )}
-          <button type="submit" className="btn" disabled={saving}>
-            {saving ? 'Saving…' : editingId === null ? 'Add rule' : 'Save changes'}
-          </button>
-        </div>
-      </form>
+          <label className="machine-field">
+            <span>Threshold {selected.unit === '%' ? '(%)' : '(processes)'}</span>
+            <input
+              type="number"
+              min={selected.unit === '%' ? '0.1' : '1'}
+              max={selected.maxThreshold}
+              step={selected.unit === '%' ? '0.1' : '1'}
+              value={form.threshold}
+              onChange={(event) => updateForm({ threshold: event.target.value })}
+              required
+            />
+          </label>
+          <label className="machine-field">
+            <span>Sustained (minutes)</span>
+            <input
+              type="number"
+              min="1"
+              max="1440"
+              step="1"
+              value={form.sustainedMinutes}
+              onChange={(event) => updateForm({ sustainedMinutes: event.target.value })}
+              required
+            />
+          </label>
+          <div className="alert-builder-footer">
+            <label className="machine-switch">
+              <input
+                type="checkbox"
+                checked={form.enabled}
+                onChange={(event) => updateForm({ enabled: event.target.checked })}
+              />
+              <span>Enable this rule</span>
+            </label>
+            <div className="alert-rule-actions">
+              {editingId !== null && (
+                <button type="button" className="btn btn-ghost" onClick={cancelEditing} disabled={saving}>
+                  Cancel
+                </button>
+              )}
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving…' : editingId === null ? 'Create alert rule' : 'Save changes'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
 
-      <ul className="alert-rule-list">
-        {rules.length === 0 && <li className="machine-settings-note">No alert rules yet. Add one above.</li>}
+      <div className="alert-rules-list-section">
+        <div className="alert-subsection-heading">
+          <div>
+            <h4>Configured rules</h4>
+            <p>Owners receive a bell notification when a rule fires or resolves.</p>
+          </div>
+          <span>{rules.length}</span>
+        </div>
+        <ul className="alert-rule-list">
+          {rules.length === 0 && (
+            <li className="alert-list-empty">
+              <span className="alert-empty-mark" aria-hidden="true">!</span>
+              <div>
+                <strong>No rules configured</strong>
+                <p>Create a rule above to start watching this machine.</p>
+              </div>
+            </li>
+          )}
         {rules.map((rule) => {
           const busy = busyRuleId === rule.id
           return (
-            <li key={rule.id} className={`alert-rule-row${editingId === rule.id ? ' alert-rule-editing' : ''}`}>
-              <div className="alert-rule-title">
-                <span>{rule.name}</span>
-                {rule.firing && <span className="alert-firing-badge">Firing</span>}
+            <li
+              key={rule.id}
+              className={`alert-rule-row${editingId === rule.id ? ' alert-rule-editing' : ''}${rule.firing ? ' alert-rule-row-firing' : rule.enabled ? ' alert-rule-row-enabled' : ''}`}
+            >
+              <div className="alert-rule-indicator" aria-hidden="true" />
+              <div className="alert-rule-content">
+                <div className="alert-rule-title">
+                  <span>{rule.name}</span>
+                  <span className={`alert-rule-status${rule.firing ? ' alert-rule-status-firing' : rule.enabled ? ' alert-rule-status-enabled' : ' alert-rule-status-paused'}`}>
+                    {rule.firing ? 'Firing' : rule.enabled ? 'Enabled' : 'Paused'}
+                  </span>
+                </div>
+                <p className="alert-rule-summary">{describeAlertRule(rule)}</p>
               </div>
-              <p className="alert-rule-summary">{describeAlertRule(rule)}</p>
               <div className="alert-rule-actions">
                 <label className="machine-switch">
                   <input type="checkbox" checked={rule.enabled} disabled={busy} onChange={() => void toggleRule(rule)} />
-                  <span>Enabled</span>
+                  <span>{rule.enabled ? 'On' : 'Off'}</span>
                 </label>
-                <button type="button" className="btn btn-ghost" onClick={() => startEditing(rule)} disabled={busy}>
+                <button type="button" className="btn btn-ghost alert-rule-action" onClick={() => startEditing(rule)} disabled={busy}>
                   Edit
                 </button>
-                <button type="button" className="btn btn-ghost" onClick={() => void removeRule(rule)} disabled={busy}>
+                <button type="button" className="btn btn-ghost alert-rule-action" onClick={() => void removeRule(rule)} disabled={busy}>
                   Delete
                 </button>
               </div>
             </li>
           )
         })}
-      </ul>
+        </ul>
+      </div>
 
       <div className="alert-history">
-        <p className="machine-eyebrow">Recent alerts</p>
+        <div className="alert-subsection-heading">
+          <div>
+            <h4>Recent activity</h4>
+            <p>The latest alerts raised by this machine.</p>
+          </div>
+          <span>{alerts.length > 8 ? '8+' : alerts.length}</span>
+        </div>
         {alerts.length === 0 ? (
-          <p className="machine-settings-note">No alerts have fired for this machine.</p>
+          <div className="alert-history-empty">
+            <span aria-hidden="true">✓</span>
+            <p>All clear. No alerts have fired for this machine.</p>
+          </div>
         ) : (
           <ul className="alert-history-list">
             {alerts.slice(0, 8).map((alert) => {
               const rule = rules.find((item) => item.id === alert.rule_id)
               const option = optionFor(alert.metric)
               return (
-                <li key={alert.id} className={`alert-history-item alert-history-${alert.status}`}>
+                <li key={alert.id} className={`alert-history-item alert-history-${alert.status === 'open' ? 'firing' : 'resolved'}`}>
+                  <span className="alert-history-marker" aria-hidden="true" />
+                  <div className="alert-history-content">
+                    <span className="alert-history-title">{rule?.name ?? option.label}</span>
+                    <span className="alert-history-detail">
+                      Reached {formatAlertValue(alert.value, option.unit)}
+                      {' '}(threshold {formatAlertValue(alert.threshold, option.unit)})
+                    </span>
+                  </div>
                   <span className="alert-history-status">{alert.status === 'open' ? 'Firing' : 'Resolved'}</span>
-                  <span>
-                    {rule?.name ?? option.label} reached {formatAlertValue(alert.value, option.unit)}
-                    {' '}(threshold {formatAlertValue(alert.threshold, option.unit)})
-                  </span>
                   <time dateTime={alert.triggered_at}>{formatTime(alert.triggered_at)}</time>
                 </li>
               )
