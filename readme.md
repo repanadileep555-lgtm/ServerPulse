@@ -10,14 +10,16 @@ the same collector also supports registered external hosts over HTTPS.
 
 - Login, registration, JWT refresh, administrator accounts, and an account directory.
 - Host registration, host-scoped collector credentials, and token rotation.
+- Windows System/Application and Linux journald log collection, service inventory,
+  log search, and machine-metric alert rules.
 - CPU/memory monitoring, all-visible-process snapshots, exact-identity process history,
   and informational long-running classification (default one hour per host).
 - Linux zombie classification; Windows reports not applicable.
 - Machines dashboard with filters, pagination, freshness, and partial-visibility indicators.
 
-Existing system/application/security log collection, OS service-state monitoring,
-alerts, log search, and reporting are **planned**, not implemented by the resource
-collector. No custom application or synthetic log generator is required.
+Windows Security logs, Linux application/authentication log files, service
+transition history, service/log-based alerts, and reporting remain **planned**.
+No custom application or synthetic log generator is required.
 
 ## Run locally
 
@@ -59,6 +61,7 @@ or [Linux and WSL collector setup](Docs/guides/setup/linux.md) to install and ru
 - [Admin guide: setup, machine registration, and running collectors](Docs/guides/admin-guide.md)
 - [Roadmap and implementation status](Docs/roadmap.md)
 - [High-Level Design](Docs/design/machine/HLD.md)
+- [Low-Level Design and function flows](Docs/design/machine/LLD.md)
 - [Database schema and retention](Docs/design/db/database-schema.md)
 - [Entity relationships](Docs/design/db/ERD.md)
 - [Table guide](Docs/design/db/tables.md)

@@ -1,9 +1,12 @@
 # ServerPulse - High-Level Design
 
-Updated: 2026-11-11. This document contains both implemented paths and the target
-design. Authentication/admin UI and host resource/process monitoring are
-implemented. Log/service collection, alerts, and reporting remain proposed.
-The [roadmap](../../roadmap.md) is the consolidated completion checklist.
+Updated: 2026-11-14. This document contains both implemented paths and the target
+design. Authentication, resource/process monitoring, Windows System/Application
+and Linux journald ingestion, current service inventory, and machine-metric alerts
+are implemented. Additional log sources, service transition history,
+service/log-based alerts, and reporting remain proposed. See the
+[LLD and function flows](LLD.md) for implementation details and boundaries; the
+[roadmap](../../roadmap.md) is the consolidated completion checklist.
 
 ## 1. Purpose
 
@@ -29,7 +32,9 @@ separate collection mechanism or a database change for every new machine.
 
 - Enterprise-scale ingestion, distributed databases, and message brokers.
 - A full SIEM, anomaly detection, or automatic service remediation.
-- Remote command execution, SSH/WinRM polling, or server credential storage.
+- General-purpose remote command execution, WinRM polling, or plaintext server
+  credential storage. SSH support is limited to installing and controlling the
+  ServerPulse collector on Linux.
 - Email/SMS notifications, multi-tenant access, and advanced user roles.
 
 ## 2. Design decisions
@@ -44,7 +49,7 @@ separate collection mechanism or a database change for every new machine.
 | Planned log/service access | PowerShell on Windows; journalctl, systemctl, and existing files on Linux |
 | Resource/process access | psutil on Windows and Linux, running on the monitored host |
 | Deployment | One backend instance; Windows and WSL are the first two hosts |
-| External hosts | Same collector with a reachable HTTPS backend URL |
+| External hosts | Same collector with HTTPS or a managed SSH reverse tunnel |
 | Credentials | Per-host collector tokens; user access/refresh JWTs and enabled-admin checks |
 | Live updates | Dashboard polls APIs initially; no WebSocket requirement |
 
@@ -54,8 +59,9 @@ under Task Scheduler or a systemd service.
 
 ## 3. Architecture
 
-The diagram is the target architecture. CPU/memory/process ingestion and queries
-exist today; log/service adapters and the alert engine do not yet exist.
+The diagram shows the shared target architecture. Resource/process ingestion,
+Windows System/Application and Linux journald adapters, current service inventory,
+and machine-metric alert evaluation exist today. See the LLD for remaining gaps.
 
 ```mermaid
 flowchart LR
@@ -96,11 +102,14 @@ same physical computer.
 
 ### 4.1 Collector
 
-Target responsibilities below include future log/service collection. The current
-`collect-host` implements psutil resource/process sampling and one pending snapshot;
-it has no journal/Event Log adapter, native log checkpoint, or service poller yet.
+The current `collect-host` implements psutil resource/process sampling, Windows
+System/Application and Linux journald collection, and Windows/systemd service
+inventory. It keeps a separate pending batch for each collection type and
+advances log checkpoints only after acknowledgement. Additional log sources and
+service transition history remain future work.
 
-- Read configured sources using platform-specific adapters.
+- Read the implemented platform sources using platform-specific adapters;
+  configurable source selection remains future work.
 - Convert native records to the common event format.
 - Poll selected services and report collection failures explicitly.
 - Maintain source checkpoints and a small persistent pending-batch spool.
@@ -110,19 +119,22 @@ it has no journal/Event Log adapter, native log checkpoint, or service poller ye
 Share scheduling, normalization, transport, configuration, and retry code between
 platforms. Keep Windows and Linux extraction code separate.
 
-Collector configuration contains the backend URL, host ID, token reference,
-enabled source IDs, service IDs, and polling intervals. Secrets must not be
-committed to Git or included in diagnostic logs.
+The current collector takes the backend URL, token, state-file path, interval,
+and optional log flag from its command line/environment. Configurable source and
+service selections remain future work. Secrets must not be committed to Git or
+included in diagnostic logs.
 
 ### 4.2 Backend
 
-Resource ingestion/querying and account/host administration exist today. Log and
-service observation ingestion, alert evaluation, and alert acknowledgement below
-remain planned.
+Resource and log ingestion/querying, current service inventory, machine-metric
+alert evaluation, and account/host administration exist today. Service transition
+history, service/log-based alert evaluation, and alert acknowledgement remain
+planned.
 
 - Authenticate collectors and validate their ownership of sources and services.
 - Validate batch sizes, event fields, timestamps, and state values.
-- Store normalized events, latest service observations, and transition history.
+- Store normalized events and latest service observations; transition history
+  remains future work.
 - Deduplicate retries and track host/source freshness.
 - Evaluate simple alert rules and expose paginated query APIs.
 - Provide administrator actions for host registration and alert acknowledgement.
@@ -130,15 +142,16 @@ remain planned.
 ### 4.3 Dashboard
 
 Implemented screens include login/registration, account/session information, admin
-account management, API/database health, and Machines. Logs, OS services, alerts,
-and reports are planned views, not alternate names for the process table.
+account management, API/database health, and Machines. The Machines view includes
+resource/process data, log search, service inventory, and machine-metric alerts.
+Reports and richer service/log alert workflows remain planned.
 
 - Overview: registered hosts, fresh/stale collectors, service issues, active alerts.
 - Hosts: platform, connectivity, latest heartbeat, and per-source errors.
 - Machines: CPU/memory history, searchable process snapshots, per-process history,
   informational long-running classification, and Linux zombie visibility.
 - Logs: host, category, severity, source, service where available, keyword, and time filters.
-- Services: latest observed state, observation age, and transition history.
+- Services: latest observed state and observation age.
 - Alerts: rule, affected host/source/service, evidence, and acknowledgement.
 
 Display empty results separately from collection errors. Do not present a stale
@@ -367,9 +380,9 @@ timestamps need an explicit quality marker if a fallback timestamp is used.
 
 ## 8. Proposed API boundaries
 
-The host/resource routes below are implemented; `/api/` log, service, and alert
-routes remain provisional. See the [backend guide](../../../Backend/README.md)
-for implemented resource/process request and response behavior.
+This table preserves the broader target API proposal; several paths are not the
+current route names. Implemented route names and behavior are documented in the
+[LLD](LLD.md) and [backend guide](../../../Backend/README.md).
 
 | API | Access | Purpose |
 | --- | --- | --- |
@@ -410,9 +423,10 @@ hide database or collection failures.
 
 ## 9. Service health and alerts
 
-This section is a planned contract. The current resource collector reports native
-process state but does not query Windows Services/systemd service health or run
-these rules. Long-running classification does not create an alert.
+The transition and service/log alert rules in this section are planned contracts.
+The collector currently queries Windows Services/systemd and stores latest
+inventory state; machine-metric alert rules are evaluated on resource ingestion.
+Long-running classification itself does not create an alert.
 
 Keep these independent:
 
@@ -488,10 +502,10 @@ events arrive; serialize its writes with normal backend database access.
 | Foundation and accounts | Implemented: async pool, migrations, auth/admin UI, account APIs, host registration, and credentials |
 | Resource/process monitoring | Implemented: psutil sampling, atomic ingestion, history, threshold classification, filtering, and Machines UI |
 | Native Linux/remote verification | Pending: Linux code/fixtures exist; verify WSL/Linux runtime and a separate HTTPS host |
-| Windows logs | Pending: existing System/Application records, checkpoints, ingestion, and log view |
-| Linux logs | Pending: available existing journal/application/auth sources, permissions, and audit support checks |
-| OS service monitoring | Inventory and current state implemented; pending: freshness, state transitions, and alerts |
-| Alerts and log search | Pending: failure/error-burst rules, acknowledgement/recovery, and log filters |
+| Windows logs | Partial: System/Application records, checkpoints, ingestion, and log view implemented; Security logs and deployment verification remain |
+| Linux logs | Partial: journald implemented; application/auth sources, permissions, audit checks, and deployment verification remain |
+| OS service monitoring | Inventory and current state implemented; pending: transition history and service-state alerting |
+| Alerts and log search | Machine-metric alerts and log filters implemented; pending: failure/error-burst rules and acknowledgement |
 | Reports and final delivery | Partial: technical guides/designs updated; reports, full demo evidence, and presentation pending |
 
 Windows and WSL testing verifies the collection adapters, not external network
@@ -513,7 +527,7 @@ the remote milestone.
 Linux fixtures and an empty registered Linux host do not verify native Linux
 collection. Native WSL/Linux and separate-host HTTPS checks are still required.
 
-### Remaining verification for planned log/service features
+### Remaining verification for partial features and platform support
 
 - Collect actual Windows System/Application records and WSL journal records where available.
 - Read existing application records from installed software on both platforms

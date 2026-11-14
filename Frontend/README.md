@@ -57,8 +57,10 @@ deliver old data. Stale/error states retain prior observations with warnings;
 never-seen hosts do not display fabricated zero measurements. Process tables
 support horizontal scrolling and keyboard focus on narrow screens.
 
-Log search, OS service monitoring, alerts, and reports are planned, not hidden
-features of the process table.
+The Machines view also includes Windows System/Application and Linux journald
+log search, current Windows/systemd service inventory, and machine-metric alert
+rules. Service transition history, log/service-based alerts, and reports remain
+planned; these are separate views, not features of the process table.
 
 ## Authentication
 

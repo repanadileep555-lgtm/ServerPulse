@@ -36,10 +36,12 @@ back `0003_monitoring` deletes resource/process history and monitoring receipts.
 ## Status and configuration
 
 Implemented: user/admin authentication, host registration and credentials,
-resource/process collection and queries, and the Machines dashboard.
-Existing-log ingestion, Windows/systemd service checks, alert evaluation, and
-reports are planned. Their tables alone do not provide those features. See the
-[roadmap](../Docs/roadmap.md) and [HLD](../Docs/design/machine/HLD.md).
+resource/process collection and queries, Windows System/Application and Linux
+journald ingestion, Windows/systemd service inventory, machine-metric alert
+evaluation, log search, and the Machines dashboard. Security/application-file
+logs, service transition history, service/log-based alerts, and reports remain
+planned. See the [roadmap](../Docs/roadmap.md), [HLD](../Docs/design/machine/HLD.md),
+and [LLD/function flows](../Docs/design/machine/LLD.md).
 
 Settings use the `SERVERPULSE_` prefix and optionally a `.env` file in the backend
 working directory. Do not commit credentials.
