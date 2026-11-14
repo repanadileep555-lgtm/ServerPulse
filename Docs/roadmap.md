@@ -1,6 +1,17 @@
 # ServerPulse Roadmap
 
-Updated: 2026-11-11.
+Updated: 2026-11-14.
+
+Current project state snapshot:
+
+- Completed foundation: user/admin authentication, host registration, collector
+  credential management, resource telemetry, process snapshots/history, and the
+  Machines dashboard.
+- Remaining milestone work: existing-log ingestion, OS service-state monitoring,
+  alerting/search, and reporting/export workflows.
+- Pending verification: Linux/WSL and external HTTPS deployment checks for the
+  collector and monitoring pipeline; no platform claims should be made without
+  that evidence.
 
 The **16 workstreams** below retain the original [synopsis](Synopsis.docx) plan.
 Week numbers are planning references, not claims about elapsed development time.
